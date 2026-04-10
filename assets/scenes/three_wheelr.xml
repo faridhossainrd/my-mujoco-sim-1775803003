@@ -88,7 +88,7 @@
               size="0.013 0.035" pos="0 0 -0.035"
               mass="0.03" rgba=".55 .55 .55 1"/>
 
-        <body name="wheel_front" pos="0 0 -0.06">
+        <body name="wheel_front" pos="0 0 -0.1">
           <!-- ctrl[0]  front_drive — higher damping for smooth rolling -->
           <joint name="front_drive" type="hinge" axis="0 1 0"
                  damping="0.25" armature="0.05"/>
