@@ -1,0 +1,159 @@
+<mujoco model="three_wheelr">
+  <compiler angle="radian"/>
+
+  <!--
+    Physics tuning:
+      timestep  0.002  — stable for correct geometry (no collision at startup)
+      cone      elliptic — accurate friction cone
+      impratio  2      — standard; high values cause bouncing contacts
+      noslip    4      — keeps wheels gripping without over-constraining
+  -->
+  <option timestep="0.002" gravity="0 0 -9.81"
+          cone="elliptic" impratio="2" noslip_iterations="4"/>
+
+  <!-- Medium-stiff contacts: snappy enough to hold weight, soft enough to absorb bumps -->
+  <default>
+    <geom solref="0.025 1" solimp="0.9 0.95 0.001"/>
+  </default>
+
+  <visual>
+    <headlight ambient=".25 .25 .25" diffuse=".6 .6 .6" specular="0 0 0"/>
+    <rgba haze="0.05 0.05 0.1 1"/>
+    <global azimuth="130" elevation="-20"/>
+  </visual>
+
+  <asset>
+    <texture name="grid" type="2d" builtin="checker"
+             rgb1=".08 .08 .12" rgb2=".14 .14 .2"
+             width="512" height="512"/>
+    <material name="grid_floor"  texture="grid" texuniform="true" reflectance="0.06"/>
+    <material name="chassis_mat" rgba=".25 .55 1 1"/>
+    <material name="wheel_dark"  rgba=".12 .12 .12 1"/>
+    <material name="wheel_blue"  rgba=".2  .5  .95 1"/>
+    <material name="rim_mat"     rgba=".75 .75 .75 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 4"   dir="0 0 -1"      diffuse=".8 .8 .9"  specular=".2 .2 .3"/>
+    <light pos="3 2 4"   dir="-1 -0.5 -1"  diffuse=".5 .6 .9"  specular=".1 .1 .2"/>
+    <light pos="-3 -2 3" dir="1 0.5 -1"    diffuse=".3 .4 .7"  specular=".1 .1 .2"/>
+
+    <geom name="floor" type="plane" size="12 12 0.1"
+          material="grid_floor" condim="3" friction="0.8 0.005 0.001"/>
+
+    <!--
+      ═══ GEOMETRY LAYOUT (world frame at rest) ═══
+        wheel_radius  = 0.08 m
+        chassis z     = 0.22  (all wheel centres land at exactly 0.08, bottom at 0)
+
+        Rear wheels:   z-offset from chassis = -0.14  → world 0.22-0.14 = 0.08 ✓
+        Front wheel:   pivot z=-0.08, wheel z=-0.06   → total -0.14, world 0.08 ✓
+
+        Chassis box x = ±0.24  → front face at x=+0.24
+        Front pivot x = +0.40  → wheel inner edge = 0.40-0.08 = 0.32 > 0.24 ✓ (CLEAR)
+        Chassis bottom = 0.22-0.05 = 0.17, wheel top = 0.16 → 1 cm vertical gap ✓
+    -->
+    <body name="chassis" pos="0 0 0.22">
+      <joint name="root" type="free"/>
+
+      <!-- Main body — reduced mass 1.4 kg -->
+      <geom name="body"
+            type="box" size="0.24 0.15 0.05"
+            mass="1.4"
+            material="chassis_mat"
+            condim="3" friction="0.3 0.005 0.001"/>
+
+      <!-- Decorative cockpit ridge -->
+      <geom name="cockpit"
+            type="box" size="0.09 0.07 0.028"
+            pos="0.04 0 0.078"
+            mass="0.03"
+            rgba=".15 .35 .75 1"/>
+
+      <!-- ────────────────────────────────────────────────────
+           FRONT WHEEL  (steerable + driven)
+
+           pivot x=0.40  →  wheel inner edge = 0.40-0.08 = 0.32
+           chassis front = 0.24  →  8 cm clear of chassis ✓
+           z chain: chassis(0.22) → pivot(-0.08) → wheel(-0.06) = world 0.08 ✓
+      ──────────────────────────────────────────────────────── -->
+      <body name="front_pivot" pos="0.40 0 -0.08">
+        <!-- ctrl[1]  steer -->
+        <joint name="steer" type="hinge" axis="0 0 1"
+               range="-0.6 0.6"
+               damping="2.0" armature="0.01" stiffness="5"/>
+
+        <!-- Steering strut / fork -->
+        <geom name="front_knuckle" type="cylinder"
+              size="0.013 0.035" pos="0 0 -0.035"
+              mass="0.03" rgba=".55 .55 .55 1"/>
+
+        <body name="wheel_front" pos="0 0 -0.04">
+          <!-- ctrl[0]  front_drive — higher damping for smooth rolling -->
+          <joint name="front_drive" type="hinge" axis="0 1 0"
+                 damping="0.25" armature="0.05"/>
+          <geom name="tyre_front" type="cylinder"
+                size="0.08 0.038" euler="1.5707963 0 0"
+                mass="0.20"
+                material="wheel_blue"
+                friction="2.5 0.01 0.001" condim="3"/>
+          <geom name="rim_front" type="cylinder"
+                size="0.042 0.034" euler="1.5707963 0 0"
+                mass="0.015" material="rim_mat"/>
+        </body>
+      </body>
+
+      <!-- ────────────────────────────────────────────────────
+           REAR-LEFT WHEEL  (driven)
+           z = 0.22 - 0.14 = 0.08  ✓  (touches floor at start)
+      ──────────────────────────────────────────────────────── -->
+      <body name="wheel_rl" pos="-0.20 0.22 -0.14">
+        <!-- ctrl[2]  rear_left_drive -->
+        <joint name="rear_left_drive" type="hinge" axis="0 1 0"
+               damping="0.25" armature="0.05"/>
+        <geom name="tyre_rl" type="cylinder"
+              size="0.08 0.038" euler="1.5707963 0 0"
+              mass="0.20"
+              material="wheel_dark"
+              friction="2.5 0.01 0.001" condim="3"/>
+        <geom name="rim_rl" type="cylinder"
+              size="0.042 0.034" euler="1.5707963 0 0"
+              mass="0.015" material="rim_mat"/>
+      </body>
+
+      <!-- ────────────────────────────────────────────────────
+           REAR-RIGHT WHEEL  (driven)
+           z = 0.22 - 0.14 = 0.08  ✓  (touches floor at start)
+      ──────────────────────────────────────────────────────── -->
+      <body name="wheel_rr" pos="-0.20 -0.22 -0.14">
+        <!-- ctrl[3]  rear_right_drive -->
+        <joint name="rear_right_drive" type="hinge" axis="0 1 0"
+               damping="0.25" armature="0.05"/>
+        <geom name="tyre_rr" type="cylinder"
+              size="0.08 0.038" euler="1.5707963 0 0"
+              mass="0.20"
+              material="wheel_dark"
+              friction="2.5 0.01 0.001" condim="3"/>
+        <geom name="rim_rr" type="cylinder"
+              size="0.042 0.034" euler="1.5707963 0 0"
+              mass="0.015" material="rim_mat"/>
+      </body>
+
+    </body><!-- /chassis -->
+  </worldbody>
+
+  <!--
+    ACTUATORS — indices match control.json
+      ctrl[0]  front_drive      velocity servo  (rad/s,  −10 .. +10)
+      ctrl[1]  steer            position servo  (rad,    −0.6 .. +0.6)
+      ctrl[2]  rear_left_drive  velocity servo  (rad/s,  −10 .. +10)
+      ctrl[3]  rear_right_drive velocity servo  (rad/s,  −10 .. +10)
+  -->
+  <actuator>
+    <velocity name="front_drive"      joint="front_drive"      kv="50"  ctrlrange="-10 10"/>
+    <position name="steer"            joint="steer"            kp="100" ctrlrange="-0.6 0.6"/>
+    <velocity name="rear_left_drive"  joint="rear_left_drive"  kv="50"  ctrlrange="-10 10"/>
+    <velocity name="rear_right_drive" joint="rear_right_drive" kv="50"  ctrlrange="-10 10"/>
+  </actuator>
+
+</mujoco>
